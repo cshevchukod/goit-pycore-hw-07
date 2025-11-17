@@ -7,24 +7,17 @@ from address_book import AddressBook, Record
 
 # Парсер команд користувача
 def parse_input(user_input):
-
     # Розбиває введений користувачем рядок на команду та аргументи.
     # Наприклад: "add Petro 12345"
     # -> команда 'add', аргументи ['Petro', '12345']
 
-    parts = user_input.strip().split()
-
-    if not parts:
-        return "", []
-
-    cmd = parts[0].lower()
-    args = parts[1:]
-    return cmd, args
+    cmd, *args = user_input.split()
+    cmd = cmd.lower()
+    return cmd, *args
 
 
 # Декоратор для обробки помилок введення
 def input_error(func):
-
     def inner(*args, **kwargs):
         try:
             return func(*args, **kwargs)
@@ -114,16 +107,15 @@ def show_phone(args, book):
 
 
 @input_error
-def show_all(book):
+def show_all(args, book):
     # Команда:  all
     # Показує всі контакти, відсортовані за імʼям.
+    # args тут не використовуються, але лишаємо для єдиного інтерфейсу.
 
     if not book.data:
         return "No contacts."
 
-    names = list(book.data.keys())
-    names.sort()
-
+    names = sorted(book.data.keys())
     lines = []
     for name in names:
         record = book.find(name)
@@ -144,6 +136,7 @@ def add_birthday(args, book):
 
     record = book.find(name)
     if record is None:
+        # У ДЗ допускається створення контакту, якщо його ще нема
         record = Record(name)
         book.add_record(record)
 
@@ -175,6 +168,7 @@ def show_birthday(args, book):
 def birthdays(args, book):
     # Команда:  birthdays
     # Повертає список контактів, яких потрібно привітати впродовж тижня.
+    # args не використовуються.
 
     upcoming = book.get_upcoming_birthdays()
     if not upcoming:
@@ -187,8 +181,8 @@ def birthdays(args, book):
     return "\n".join(lines)
 
 
-# Основна логіка роботи бота
-def assistant_main():
+# Основна логіка роботи бота (для запуску без main.py з ДЗ)
+def main():
     # Створюємо порожню адресну книгу
     book = AddressBook()
 
@@ -196,7 +190,7 @@ def assistant_main():
 
     while True:
         user_input = input("Enter a command: ")
-        command, args = parse_input(user_input)
+        command, *args = parse_input(user_input)
 
         # Команди виходу
         if command in ["close", "exit"]:
@@ -216,7 +210,7 @@ def assistant_main():
             print(show_phone(args, book))
 
         elif command == "all":
-            print(show_all(book))
+            print(show_all(args, book))
 
         elif command == "add-birthday":
             print(add_birthday(args, book))
@@ -232,6 +226,9 @@ def assistant_main():
 
 
 # Точка входу для імпорту
+def assistant_main():
+    main()
+
 
 if __name__ == "__main__":
-    assistant_main()
+    main()
