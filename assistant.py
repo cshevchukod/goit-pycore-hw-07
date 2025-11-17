@@ -1,114 +1,237 @@
-from address_book import AddressBook
-from record import Record
+# Консольний бот-помічник (книга контактів)
+# Запуск:  python assistant.py
+# Або імпорт:  from assistant import assistant_main
+
+from address_book import AddressBook, Record
 
 
+# Парсер команд користувача
+def parse_input(user_input):
+
+    # Розбиває введений користувачем рядок на команду та аргументи.
+    # Наприклад: "add Petro 12345"
+    # -> команда 'add', аргументи ['Petro', '12345']
+
+    parts = user_input.strip().split()
+
+    if not parts:
+        return "", []
+
+    cmd = parts[0].lower()
+    args = parts[1:]
+    return cmd, args
+
+
+# Декоратор для обробки помилок введення
 def input_error(func):
+
     def inner(*args, **kwargs):
         try:
             return func(*args, **kwargs)
+
         except KeyError:
+            # Контакт не знайдено
             return "Contact not found."
+
         except ValueError as e:
-            # або стандартний текст, або текст з exception
-            return str(e)
+            # Валідація телефону / дати або неправильний формат команди
+            msg = str(e)
+            return msg or "Give me name and phone please."
+
         except IndexError:
-            return "Not enough arguments."
+            # Коли користувач передав недостатньо аргументів
+            return "Enter the argument for the command"
+
     return inner
 
 
-def parse_input(user_input: str):
-    parts = user_input.split()
-    command = parts[0].lower() if parts else ""
-    return command, *parts[1:]
-
+# Обробники команд
 
 @input_error
-def add_contact(args, book: AddressBook):
-    name, phone, *_ = args
+def add_contact(args, book):
+    # Команда:  add <name> <phone>
+    # Додає новий контакт або додає телефон до існуючого.
+
+    if len(args) != 2:
+        raise ValueError("Give me name and phone please.")
+
+    name, phone = args
+
     record = book.find(name)
     message = "Contact updated."
+
     if record is None:
         record = Record(name)
         book.add_record(record)
         message = "Contact added."
-    if phone:
-        record.add_phone(phone)
+
+    record.add_phone(phone)
     return message
 
 
 @input_error
-def change_contact(args, book: AddressBook):
-    name, old_phone, new_phone, *_ = args
+def change_contact(args, book):
+    # Команда:  change <name> <new_phone>
+    # Змінює телефон у контакті (або додає, якщо не було).
+
+    if len(args) != 2:
+        raise ValueError("Give me name and phone please.")
+
+    name, new_phone = args
+
     record = book.find(name)
     if record is None:
         raise KeyError
-    record.edit_phone(old_phone, new_phone)
-    return "Phone changed."
+
+    # Якщо в контакта немає телефонів — додаємо новий
+    if not record.phones:
+        record.add_phone(new_phone)
+    else:
+        old_phone = record.phones[0].value
+        record.edit_phone(old_phone, new_phone)
+
+    return "Contact updated."
 
 
 @input_error
-def show_phone(args, book: AddressBook):
-    name, *_ = args
+def show_phone(args, book):
+    # Команда:  phone <name>
+    # Повертає телефони контакту.
+
+    if not args:
+        raise IndexError
+
+    name = args[0]
+
     record = book.find(name)
     if record is None:
         raise KeyError
-    phones = [p.value for p in record.phones]
-    return ", ".join(phones) if phones else "No phones."
+
+    if not record.phones:
+        return "No phones."
+
+    return ", ".join(p.value for p in record.phones)
 
 
 @input_error
-def show_all(args, book: AddressBook):
+def show_all(book):
+    # Команда:  all
+    # Показує всі контакти, відсортовані за імʼям.
+
     if not book.data:
-        return "Address book is empty."
+        return "No contacts."
+
+    names = list(book.data.keys())
+    names.sort()
+
     lines = []
-    for record in book.data.values():
-        phones = ", ".join(p.value for p in record.phones) if record.phones else "no phones"
-        bday = record.birthday.value if record.birthday else "no birthday"
-        lines.append(f"{record.name.value}: {phones}; birthday: {bday}")
+    for name in names:
+        record = book.find(name)
+        lines.append(str(record))
+
     return "\n".join(lines)
 
 
-# НОВІ ХЕНДЛЕРИ
-
 @input_error
-def add_birthday(args, book: AddressBook):
-    """
-    add-birthday [ім'я] [дата народження в форматі DD.MM.YYYY]
-    """
-    name, birthday, *_ = args
+def add_birthday(args, book):
+    # Команда:  add-birthday <name> <DD.MM.YYYY>
+    # Додає або оновлює день народження контакту.
+
+    if len(args) != 2:
+        raise ValueError("Give me name and birthday please.")
+
+    name, birthday = args
+
     record = book.find(name)
     if record is None:
-        # зазвичай в ДЗ вимагають працювати тільки з існуючими контактами;
-        # якщо хочеш, можна створювати новий Record, але за замовчуванням: помилка
         record = Record(name)
         book.add_record(record)
+
     record.add_birthday(birthday)
     return "Birthday added."
 
 
 @input_error
-def show_birthday(args, book: AddressBook):
-    """
-    show-birthday [ім'я]
-    """
-    name, *_ = args
+def show_birthday(args, book):
+    # Команда:  show-birthday <name>
+    # Повертає дату народження контакту.
+
+    if not args:
+        raise IndexError
+
+    name = args[0]
+
     record = book.find(name)
     if record is None:
         raise KeyError
+
     if record.birthday is None:
         return "Birthday is not set."
+
     return record.birthday.value
 
 
 @input_error
-def birthdays(args, book: AddressBook):
-    """
-    birthdays
-    """
+def birthdays(args, book):
+    # Команда:  birthdays
+    # Повертає список контактів, яких потрібно привітати впродовж тижня.
+
     upcoming = book.get_upcoming_birthdays()
     if not upcoming:
         return "No birthdays in the next week."
+
     lines = []
     for item in upcoming:
         lines.append(f"{item['name']}: {item['congratulation_date']}")
+
     return "\n".join(lines)
+
+
+# Основна логіка роботи бота
+def assistant_main():
+    # Створюємо порожню адресну книгу
+    book = AddressBook()
+
+    print("Welcome to the assistant bot!")
+
+    while True:
+        user_input = input("Enter a command: ")
+        command, args = parse_input(user_input)
+
+        # Команди виходу
+        if command in ["close", "exit"]:
+            print("Good bye!")
+            break
+
+        elif command == "hello":
+            print("How can I help you?")
+
+        elif command == "add":
+            print(add_contact(args, book))
+
+        elif command == "change":
+            print(change_contact(args, book))
+
+        elif command == "phone":
+            print(show_phone(args, book))
+
+        elif command == "all":
+            print(show_all(book))
+
+        elif command == "add-birthday":
+            print(add_birthday(args, book))
+
+        elif command == "show-birthday":
+            print(show_birthday(args, book))
+
+        elif command == "birthdays":
+            print(birthdays(args, book))
+
+        else:
+            print("Invalid command.")
+
+
+# Точка входу для імпорту
+
+if __name__ == "__main__":
+    assistant_main()
